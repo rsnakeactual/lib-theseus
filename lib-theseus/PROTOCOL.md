@@ -917,7 +917,7 @@ and exits non-zero if any required field is missing or malformed.
     "registry":   "https://www.npmjs.com/package/marked",
     "repository": "https://github.com/markedjs/marked",
     "studiedAt":  "2026-04-30",
-    "studiedBy":  "Robert Hansen <robert@example.com>"
+    "studiedBy":  "Jane Doe <jane@example.com>"
   },
   "specifications": [
     { "name": "CommonMark 0.31.2",

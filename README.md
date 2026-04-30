@@ -135,7 +135,7 @@ public dependencies and validates that on its own source.
 
 ## License
 
-[MIT](LICENSE) — Copyright (c) 2026 Robert Hansen.
+[MIT](LICENSE) — Copyright (c) 2026 Robert "RSnake" Hansen.
 
 ## Contributing
 
