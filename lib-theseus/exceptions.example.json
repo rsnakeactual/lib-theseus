@@ -1,0 +1,27 @@
+{
+  "_comment_1": "Per-project config for lib-theseus/scan.js. Copy this file to 'exceptions.json' (in the same directory) and fill in the values that apply to your codebase. All keys are optional. Per-language keys are objects so a polyglot project can list separate exceptions for each ecosystem.",
+
+  "_comment_2": "platformExceptions — for each language, the packages that are NOT pure libraries you can rewrite (the runtime your app compiles against, native bindings with no JS/Py/Rs equivalent, build-only packagers that don't ship). Each entry MUST be justified in writing in PROTOCOL.md §3.1. Keep these lists short — adding entries is the protocol's most-abused escape hatch.",
+
+  "platformExceptions": {
+    "javascript": [],
+    "python": [],
+    "rust": [],
+    "go": [],
+    "ruby": []
+  },
+
+  "_comment_3": "projectPackages — names that scanners should treat as project-local even when they look like third-party imports. For most languages this is auto-detected from manifests (Cargo.toml [package].name, go.mod 'module ...' line, pyproject.toml [project].name, top-level dirs containing __init__.py). Use this only when auto-detection misses something.",
+
+  "projectPackages": {
+    "javascript": [],
+    "python": [],
+    "rust": [],
+    "go": [],
+    "ruby": []
+  },
+
+  "_comment_4": "skipDirs — extra directory names (matched on basename, anywhere in the tree) the scanner will not descend into. The defaults already cover node_modules, .git, out, build, dist, .cache, _research, __pycache__, target, vendor, .gradle, .idea, .vscode, venv, .venv. Use this for sibling sub-projects in unsupported languages, vendored asset folders, etc.",
+
+  "skipDirs": []
+}

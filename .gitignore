@@ -1,0 +1,20 @@
+# Per-package research installs created during Phase 2 of the protocol.
+# These are gitignored on purpose — they hold temporarily-installed
+# original packages that get deleted in Phase 7.
+**/lib-theseus/*/_research/
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.idea/
+.vscode/
+
+# A user who clones this repo as a host project (rather than as a
+# skill or as a payload source) might accidentally create a local
+# exceptions.json. The canonical config lives in exceptions.example.json
+# and ships; the per-project file does not. If you're developing
+# lib-theseus itself (the canonical repo) you should never have an
+# exceptions.json here.
+/lib-theseus/exceptions.json
