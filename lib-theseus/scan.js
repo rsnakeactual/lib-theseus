@@ -342,25 +342,46 @@ function validateTheseusJson(parsed, packageDir, projectRoot) {
   }
   if (!isArray(parsed.abuseCases)) {
     r('abuseCases must be an array (use [] if no abuse cases apply, but think hard before saying so)');
+  }
+  if (!isArray(parsed.performanceMandates)) {
+    r('performanceMandates must be an array (use [] only if the library has no user-visible performance-critical path; rare)');
     return errors;
   }
   const abuseIds = new Set();
-  for (let i = 0; i < parsed.abuseCases.length; i++) {
-    const a = parsed.abuseCases[i];
-    const where = `abuseCases[${i}]`;
-    if (!isObject(a)) { r(`${where} must be an object`); continue; }
-    if (!isString(a.id))         r(`${where}.id must be a non-empty string (e.g. "AC-001")`);
-    else abuseIds.add(a.id);
-    if (!isString(a.title))      r(`${where}.title must be a non-empty string`);
-    if (!isString(a.category))   r(`${where}.category must be a non-empty string`);
-    else if (!ABUSE_CATEGORIES.has(a.category)) r(`${where}.category "${a.category}" is not in the closed set (see PROTOCOL.md §11.4)`);
-    if (!isString(a.scenario))   r(`${where}.scenario must be a non-empty string`);
-    if (!isString(a.ourDefense)) r(`${where}.ourDefense must be a non-empty string`);
-    if (!isString(a.test))       r(`${where}.test must be a path string`);
+  if (isArray(parsed.abuseCases)) {
+    for (let i = 0; i < parsed.abuseCases.length; i++) {
+      const a = parsed.abuseCases[i];
+      const where = `abuseCases[${i}]`;
+      if (!isObject(a)) { r(`${where} must be an object`); continue; }
+      if (!isString(a.id))         r(`${where}.id must be a non-empty string (e.g. "AC-001")`);
+      else abuseIds.add(a.id);
+      if (!isString(a.title))      r(`${where}.title must be a non-empty string`);
+      if (!isString(a.category))   r(`${where}.category must be a non-empty string`);
+      else if (!ABUSE_CATEGORIES.has(a.category)) r(`${where}.category "${a.category}" is not in the closed set (see PROTOCOL.md §11.4)`);
+      if (!isString(a.scenario))   r(`${where}.scenario must be a non-empty string`);
+      if (!isString(a.ourDefense)) r(`${where}.ourDefense must be a non-empty string`);
+      if (!isString(a.test))       r(`${where}.test must be a path string`);
+      else {
+        const testPath = path.resolve(packageDir, a.test);
+        try { fs.accessSync(testPath); }
+        catch { r(`${where}.test points at "${a.test}" but no such file exists relative to the package folder`); }
+      }
+    }
+  }
+  for (let i = 0; i < parsed.performanceMandates.length; i++) {
+    const p = parsed.performanceMandates[i];
+    const where = `performanceMandates[${i}]`;
+    if (!isObject(p)) { r(`${where} must be an object`); continue; }
+    if (!isString(p.id))       r(`${where}.id must be a non-empty string (e.g. "PM-001")`);
+    if (!isString(p.title))    r(`${where}.title must be a non-empty string`);
+    if (!isString(p.scenario)) r(`${where}.scenario must be a non-empty string describing what work is being measured and why timing matters`);
+    if (!isString(p.baseline)) r(`${where}.baseline must be a non-empty string with the measured timing/memory/throughput of the original`);
+    if (!isString(p.mandate))  r(`${where}.mandate must be a non-empty string with the bound this impl must meet (prefer "≤Nx original" over absolutes)`);
+    if (!isString(p.test))     r(`${where}.test must be a path string pointing at the benchmark`);
     else {
-      const testPath = path.resolve(packageDir, a.test);
+      const testPath = path.resolve(packageDir, p.test);
       try { fs.accessSync(testPath); }
-      catch { r(`${where}.test points at "${a.test}" but no such file exists relative to the package folder`); }
+      catch { r(`${where}.test points at "${p.test}" but no such file exists relative to the package folder`); }
     }
   }
   if (isArray(parsed.knownVulnerabilities)) {

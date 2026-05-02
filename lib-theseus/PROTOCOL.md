@@ -313,21 +313,24 @@ specification of its behavior lives. The original package is
 uses, (b) the public spec the implementation must conform to, and
 (c) the original's license.
 
-### Phase 3 — Write the test cases (parity *and* abuse)
+### Phase 3 — Write the test cases (parity, abuse, *and* performance)
 
-**Goal:** capture both **what the library is supposed to do** (parity
-cases) and **what attackers will try to make it do** (abuse cases) as
-runnable tests, written **before** the implementation. These tests
-become the parity-and-abuse gate that the new code must clear.
+**Goal:** capture **what the library is supposed to do** (parity
+cases), **what attackers will try to make it do** (abuse cases), and
+**how fast it has to do it** (performance mandates) as runnable
+tests, written **before** the implementation. Together these become
+the parity-and-abuse-and-performance gate the new code must clear.
 
-This phase produces two complementary test suites:
+This phase produces three complementary test suites:
 
 ```
 lib-theseus/<package>/
 ├── fixtures/         ← parity inputs (real-world content the library handles)
 ├── tests/            ← parity-test scripts; assert behavior matches original
 ├── abuse-fixtures/   ← attacker-crafted inputs (DoS, injection, parser tricks)
-└── abuse-tests/      ← abuse-test scripts; assert defensive behavior
+├── abuse-tests/      ← abuse-test scripts; assert defensive behavior
+├── perf-fixtures/    ← representative inputs for benchmarking
+└── perf-tests/       ← performance benchmarks; assert timing/memory bounds
 ```
 
 #### 3a. Parity cases — "the library does what it says"
@@ -389,7 +392,59 @@ each scenario as a fixture + assertion:
   `test` path. See §11 for the schema. The abuse-case list and the
   `theseus.json` list must agree exactly.
 
-#### 3c. Confirm the suites work against the original (where applicable)
+#### 3c. Performance mandates — "the library does it fast enough"
+
+A re-implementation that's correct and hardened but ten times slower
+than the original is **a regression**, not a replacement. Performance
+mandates are the third dimension of the test suite: explicit
+timing/memory/throughput bounds the new impl must meet, anchored to
+measurements taken from the original during Phase 2.
+
+This is also a **subtle security boundary** — a slow re-implementation
+is a denial-of-service vulnerability waiting for the right input
+shape, even if no specific input crashes it. (See §7.6.)
+
+For each library, identify the performance-critical paths and encode
+each as a runnable benchmark + assertion:
+
+- **Profile the original.** During Phase 2, while the research install
+  is live, run the original against representative fixtures (the same
+  ones that will go in `perf-fixtures/`) and capture timings, memory
+  high-water marks, and any other relevant metric (allocations,
+  syscalls, file descriptors). These become the *baseline*.
+- **Identify the user-visible budget.** Where does the library sit
+  in the host project's hot path? Is its output rendered on
+  tab-switch (≤100ms is human-perceptible)? Is it called per-request
+  in a server (a few ms tops)? Is it offline batch (seconds OK)? Set
+  the *mandate* — the bound your impl must meet — accordingly.
+- **Set the mandate as a multiple of the baseline, not an absolute.**
+  E.g. "≤1.5× the original's wall-clock on the canonical fixture"
+  rather than "≤80ms". Multiples survive hardware changes and CI
+  runner variability; absolutes don't. If the original is slow, an
+  absolute mandate may be fine; otherwise prefer multiples.
+- **Cover at least these axes** (whichever apply):
+  | Axis | What to measure |
+  |---|---|
+  | Wall-clock latency | end-to-end time on a representative input |
+  | Asymptotic complexity | timing curve across input sizes (1KB, 100KB, 10MB) — the slope, not just one point |
+  | Memory high-water | peak resident set during the run |
+  | Allocation count / GC pressure | for long-lived servers |
+  | Throughput | ops/sec under sustained load (for protocol clients, parsers in tight loops) |
+  | Cold-start cost | time-to-first-result (matters for CLI tools, serverless) |
+- **Write benchmarks in `perf-tests/`** that:
+  - Run the impl against fixtures in `perf-fixtures/`.
+  - Take N samples (e.g. 50), discard outliers, report a percentile
+    (p50 / p95).
+  - Assert the result against the mandate; exit non-zero on
+    violation.
+  - Print enough detail that a regression is debuggable (which
+    fixture, what was measured, what the threshold was).
+- Each performance mandate is recorded in `theseus.json` with an
+  `id` (e.g. `PM-001`), `title`, `scenario`, `baseline` (measured
+  from the original), `mandate` (the bound your impl must meet), and
+  `test` path. See §11 for the schema.
+
+#### 3d. Confirm the suites work against the original (where applicable)
 
 - Parity suite must pass against the original package.
 - Abuse suite: any case asserting the original was *vulnerable* (a
@@ -397,6 +452,9 @@ each scenario as a fixture + assertion:
   the bad behavior against the original — that's how you know the
   test is real. Cases asserting general defensive behavior should
   pass against any non-vulnerable version.
+- Performance suite: should run against the original to capture or
+  confirm the recorded `baseline` numbers. The mandates the new impl
+  will face are derived from these measurements.
 
 **Done when:**
 - Every API in the PRD has ≥1 parity test.
@@ -405,11 +463,16 @@ each scenario as a fixture + assertion:
   paired abuse test.
 - Every abuse-case category that applies to this library type has
   at least one test.
-- Both suites have been executed and the results recorded in PRD.md.
+- Every user-visible performance-critical path has a mandate in
+  `theseus.json#performanceMandates` with a paired benchmark in
+  `perf-tests/` and a recorded baseline from the original.
+- All three suites have been executed and the results recorded in
+  PRD.md.
 
 The point of writing tests *before* code is that the tests now
-encode "what we mean by correct" *and* "what we mean by hardened,"
-independent of how anyone (LLM or otherwise) chooses to implement it.
+encode "what we mean by correct," "what we mean by hardened," *and*
+"what we mean by fast enough," independent of how anyone (LLM or
+otherwise) chooses to implement it.
 
 ### Phase 4 — Implement (copy the *behavior*, not the *code*)
 
@@ -452,23 +515,31 @@ original.
 the PRD lists, **and** every abuse case from Phase 3 has a matching
 defensive measure documented in code comments or the PRD (e.g. "max
 input length enforced," "linear-time tokenizer," "shell args passed
-as array, never concatenated"). Whether it works is Phase 5's job.
+as array, never concatenated"), **and** the algorithmic complexity
+of the hot paths is appropriate for the performance mandates from
+Phase 3c (linear/quasilinear where the mandate demands it; no
+quadratic loops on user-controlled input lengths). Whether it
+actually meets the mandates is Phase 5's job.
 
 ### Phase 5 — Verify; loop back to Phase 4 on failure
 
-**Goal:** prove the implementation behaves correctly by running both
-the parity and abuse suites from Phase 3 against it, and iterate
-until both are green.
+**Goal:** prove the implementation behaves correctly by running all
+three suites from Phase 3 against it, and iterate until they're all
+green.
 
 **Procedure:**
 
-- Point both test suites at the new implementation (replace the
+- Point all three test suites at the new implementation (replace the
   `require('<pkg>')` in tests with the relative path to the new
   module — see Phase 7 for the global flip).
 - Run the parity suite. Every test must pass.
 - Run the abuse suite. Every test must pass — **including** every
   test that reproduces a known CVE against the original. The new
   impl must not exhibit any of those weaknesses.
+- Run the performance suite. Every benchmark must come in under its
+  recorded mandate. A perf failure is not "we'll optimize later" —
+  it's a parity-gate failure. Loop back to Phase 4 and fix the
+  algorithm, not the benchmark.
 - For each parity failure, return to Phase 4 and fix the
   implementation — **never** the test, unless the test itself
   encodes a behavior the host project does not actually need (in
@@ -477,15 +548,22 @@ until both are green.
 - For each abuse failure, return to Phase 4 and **harden**, never
   weaken the test. An abuse failure is a real vulnerability you just
   introduced; it does not get to be silenced.
-- Loop until both suites are clean. There is no "good enough." If a
-  test cannot be made to pass, that is a finding to surface to the
+- For each performance failure, return to Phase 4 and **fix the
+  algorithm**. Loosening a mandate "because our impl is slower" is
+  the same anti-pattern as silencing an abuse test — the mandate is
+  what the user-visible budget actually demands. If a mandate truly
+  cannot be met without a different design, surface that to the
+  human as a finding; do not paper over it.
+- Loop until all three suites are clean. There is no "good enough."
+  A test that cannot be made to pass is a finding to surface to the
   human, not a reason to skip it.
 
-**Done when:** both suites pass against the new implementation; any
-parity diff between original-output and new-output is either zero or
-documented in the PRD as an intentional deviation with a written
-justification; every abuse case asserts the desired defensive
-behavior.
+**Done when:** all three suites pass against the new implementation;
+any parity diff between original-output and new-output is either
+zero or documented in the PRD as an intentional deviation with a
+written justification; every abuse case asserts the desired
+defensive behavior; every performance mandate is met with the
+recorded measurement included in PRD.md.
 
 ### Phase 6 — Document the library PRD *and* the `theseus.json` record
 
@@ -512,17 +590,19 @@ vulnerable to CVE-X? do we have a test for that?" Both must exist.
   shorter version. Capture: purpose, API surface, behavior contract,
   spec references, the original's license, the confirmation that no
   source was copied, the test suite location, every abuse case and
-  its defense, every intentional deviation from the original, known
+  its defense, every performance mandate with its recorded
+  measurement, every intentional deviation from the original, known
   limits.
 - **Write `theseus.json`** per §11's schema. The required fields
   capture the provenance (which package, which version, which
   license, when studied, by whom), the replacement (where it lives,
   when it shipped, which commit), the security record (every CVE in
-  the studied version's history and our mitigation), and the abuse
+  the studied version's history and our mitigation), the abuse
   cases (each with id, scenario, defense, and the test path that
-  proves it). The `scan.js` will validate this file on every run
-  (§14.5); incomplete or malformed `theseus.json` is a parity-gate
-  failure.
+  proves it), and the performance mandates (each with id, scenario,
+  baseline, mandate, and the benchmark path). The `scan.js` will
+  validate this file on every run (§14.5); incomplete or malformed
+  `theseus.json` is a parity-gate failure.
 - **Update `lib-theseus/INVENTORY.md`:** status `pending → replaced`,
   with the commit hash and date.
 
@@ -699,9 +779,50 @@ excuse to narrate. A `// implements RFC 5322 §3.6.4 unfolding because
 raw headers in our fixtures contain CRLF+WSP continuations` is a good
 comment. A `// parse the line` over `parseLine()` is not.
 
+### 7.6 Performance must not regress
+
+A re-implementation that's correct and hardened but materially
+slower than the original is a regression dressed up as a
+replacement. Worse, slow code on a user-controlled input is
+itself a security flaw — the line between "merely sluggish" and
+"DoS" is whichever input shape an attacker chooses.
+
+The discipline:
+
+- **Profile, don't guess.** Phase 2 captures baseline timings from
+  the original. Phase 3c encodes per-library mandates. Phase 5
+  asserts they're met. No "feels fast enough."
+- **Algorithmic before micro.** A linear-time impl on naïve code
+  beats an O(n²) impl with hand-tuned hot paths every time. The
+  spec almost always permits a linear approach; if you find
+  yourself reaching for a clever optimization, double-check that
+  the algorithm is right first.
+- **No quadratic loops on user-controlled lengths.** A nested loop
+  over an input string is a DoS bug waiting for the right input
+  size. Use linear data structures (Maps, Sets) over array search.
+- **Bound everything that's bounded in the spec.** If the spec
+  caps something (max header length, max nesting depth, max
+  message size), enforce the cap explicitly. If the spec is silent,
+  pick a defensible cap; don't ship "unbounded" as the default.
+- **Don't allocate in tight loops.** A parser that creates a new
+  object per token will spend more time in GC than parsing. Reuse
+  buffers; emit tokens through a callback or a pre-sized array.
+- **Cold start counts.** Top-level `require` of every plugin a
+  CLI tool *might* use makes startup linear in plugin count. Lazy-
+  load. The host project's library is part of its boot path.
+
+**Hard requirement:** every performance mandate listed in
+`theseus.json#performanceMandates` must have a paired benchmark
+in `perf-tests/` that runs against the new implementation and
+asserts the bound. The benchmark must include enough output to
+debug a regression — which fixture, what was measured, what the
+threshold was, what the actual was. A passing benchmark with no
+diagnostic output isn't useful when it eventually fails on
+someone else's machine.
+
 ---
 
-## 8. THE PARITY-AND-ABUSE GATE
+## 8. THE PARITY-AND-ABUSE-AND-PERFORMANCE GATE
 
 A rewrite is **not done** until every check below is green. The
 checklist goes in `lib-theseus/<package>/PRD.md` under a "Gate"
@@ -734,6 +855,24 @@ section, ticked, with the test outputs.
   to this library type, ≥1 abuse case exists.
 - [ ] **The spec's "Security Considerations" section has been read**
   and every applicable item has a matching abuse case.
+
+**Performance:**
+
+- [ ] **Every user-visible performance-critical path has a mandate**
+  in `theseus.json#performanceMandates`, anchored to a baseline
+  measurement taken from the original.
+- [ ] **Every mandate has a runnable benchmark** in `perf-tests/`
+  that asserts the bound and prints diagnostic detail on failure.
+- [ ] **The performance suite passes** against the new
+  implementation. Every benchmark is at or under its mandate.
+- [ ] **Asymptotic complexity has been verified** on the hot paths —
+  no quadratic or exponential behavior on user-controlled input
+  lengths.
+- [ ] **Cold-start cost has been measured** if the library sits in a
+  CLI / serverless / boot-path position.
+- [ ] **The mandate values themselves have been reviewed** by a
+  human against the host project's actual user-visible budgets, not
+  guessed by the LLM that wrote them.
 
 **Provenance & licensing:**
 
@@ -851,39 +990,65 @@ This section is **not optional** and "no abuse cases apply" is rarely
 true — even the simplest parser has DoS-shaped edges. See §7.3 for
 the attack-class checklist and the CVE-mapping requirement.
 
-## 5. Behavior contract
+## 5. Performance mandates (the contract this impl must MEET)
+Enumerate every user-visible performance budget this implementation
+must clear. For each:
+- ID (e.g. `PM-001`)
+- Title
+- Scenario (what work is being done and why timing matters here)
+- Baseline (measured timing/memory/throughput of the original on
+  the canonical fixture, including hardware class)
+- Mandate (the bound your impl must meet — prefer a multiple of the
+  baseline like "≤1.5× original" over an absolute number)
+- Reference to the benchmark in `perf-tests/` that proves the bound
+
+This section is **not optional** and "performance doesn't matter
+here" is rarely true. A re-implementation that's 10× slower than
+the original is a regression dressed up as a replacement, and on
+user-controlled input it's a DoS bug. See §7.6 for the discipline
+and the attack-axis list.
+
+## 6. Behavior contract
 Describe input/output, error modes, format quirks, and any spec-
 defined edge cases the implementation honors. Cite spec sections,
 including the spec's "Security Considerations" entries.
 
-## 6. Fixtures & tests
+## 7. Fixtures & tests
 - Parity fixtures: `lib-theseus/<package>/fixtures/`
 - Parity tests:    `lib-theseus/<package>/tests/`
 - Abuse fixtures:  `lib-theseus/<package>/abuse-fixtures/`
 - Abuse tests:     `lib-theseus/<package>/abuse-tests/`
+- Perf fixtures:   `lib-theseus/<package>/perf-fixtures/`
+- Perf tests:      `lib-theseus/<package>/perf-tests/`
 - How to run: `<command>`.
-- Coverage summary: every fixture, every API entry, every abuse case.
+- Coverage summary: every fixture, every API entry, every abuse
+  case, every performance mandate.
 
-## 7. Intentional deviations from the original
+## 8. Intentional deviations from the original
 List every place output differs from the original, with reason.
 ("Original preserves CRLF; we normalize to LF on output. Reason:
 host project's renderer normalizes anyway. Harmless.")
 If this section is empty, say so explicitly.
 
-## 8. Gate (§8 of PROTOCOL)
-Tick every parity / security / provenance / cleanup / engineering
-box. Record commit hashes for each. Link to the test runs.
+## 9. Gate (§8 of PROTOCOL)
+Tick every parity / security / performance / provenance / cleanup /
+engineering box. Record commit hashes for each. Link to the test
+runs and the benchmark outputs (with measured values, not just
+pass/fail).
 
-## 9. Known limits
+## 10. Known limits
 What this implementation does NOT do, vs. the original. What inputs
 it will refuse or fail on. The list of things a future contributor
 would need to extend if a new feature requires more of the original
 package's surface.
 
-## 10. Maintenance notes
+## 11. Maintenance notes
 How to extend it. Which spec sections govern which file. What to
 re-test if you change <X>. Where the corresponding `theseus.json`
-lives and what to update there if the PRD changes.
+lives and what to update there if the PRD changes. **When you change
+the implementation, re-run all three suites — parity, abuse, and
+performance.** A change that doesn't break parity can still tank
+performance silently; the perf suite is your regression net.
 ```
 
 The PRD is the artifact future *humans* reach for. The companion
@@ -964,6 +1129,24 @@ and exits non-zero if any required field is missing or malformed.
       "ourDefense":  "Tokenizer is linear-time over input length; no backtracking constructs on user input.",
       "test":        "abuse-tests/redos-heading.test.js"
     }
+  ],
+  "performanceMandates": [
+    {
+      "id":         "PM-001",
+      "title":      "Render 1MB markdown in tab-switch budget",
+      "scenario":   "The host project renders ~1MB of markdown when the user switches into a notes tab; rendering is on the user-visible path. >100ms is perceptible.",
+      "baseline":   "marked@18.0.0 takes p95 ≈ 85ms on perf-fixtures/large.md (M-series Mac, 16GB, Node 22).",
+      "mandate":    "≤1.5× original (≤128ms p95) on the same fixture and hardware class.",
+      "test":       "perf-tests/large-render.bench.js"
+    },
+    {
+      "id":         "PM-002",
+      "title":      "Linear-time scaling on input size",
+      "scenario":   "User inputs are user-controlled in size; quadratic behavior is a DoS edge.",
+      "baseline":   "marked@18.0.0 timing curve on 1KB / 100KB / 10MB fixtures fits a linear regression with R² > 0.99.",
+      "mandate":    "Our impl's timing curve over the same input sizes must also fit a linear (or quasi-linear, n log n) regression with R² > 0.95.",
+      "test":       "perf-tests/scaling.bench.js"
+    }
   ]
 }
 ```
@@ -987,6 +1170,7 @@ failure.
 | `license.confirmation` | string | One- or two-sentence statement of *how* the impl was derived (spec / behavior / both) and confirmation no source was copied. |
 | `knownVulnerabilities` | array | May be empty, but the field must be present (signals "we checked"). Each entry: `id`, `affectsVersions`, `title`, `ourMitigation`. Optional: `abuseCaseRef`. |
 | `abuseCases` | array | May be empty, but the field must be present. Each entry: `id`, `title`, `category`, `scenario`, `ourDefense`, `test`. |
+| `performanceMandates` | array | May be empty *only* if the library has no user-visible performance-critical path (rare). Each entry: `id`, `title`, `scenario`, `baseline`, `mandate`, `test`. |
 
 ### 11.3 Optional but recommended fields
 
@@ -1200,6 +1384,10 @@ either a `PRD.md` or a `theseus.json`). For each:
   set, the referenced abuse-case `id` must exist in `abuseCases`.
 - For each `abuseCases[*].test`, the path must exist on disk
   (relative to the package folder).
+- For each `performanceMandates[*]`, all required fields (`id`,
+  `title`, `scenario`, `baseline`, `mandate`, `test`) must be
+  present and non-empty, and `test` must point at an existing path
+  on disk relative to the package folder.
 
 Failures are reported in their own section of the scan output
 (separate from the import-scan section) and contribute to the

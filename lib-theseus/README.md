@@ -193,20 +193,26 @@ fixed (`PROTOCOL.md §5`):
 2. **Study** — find the public spec; license-check; CVE-history
    check (npm advisory DB / OSV / GHSA); optional research install
    in `lib-theseus/<package>/_research/` (gitignored).
-3. **Test cases (parity *and* abuse)** — write parity tests against
-   the *original* with golden fixtures; **also** write abuse tests
-   that reproduce every known CVE in the studied version's history
-   plus the OWASP-shaped attack surface for that library type.
+3. **Test cases (parity, abuse, *and* performance)** — write parity
+   tests against the *original* with golden fixtures; **also** write
+   abuse tests that reproduce every known CVE in the studied
+   version's history plus the OWASP-shaped attack surface; **also**
+   write performance benchmarks anchored to baselines measured from
+   the original — wall-clock latency, memory high-water, asymptotic
+   complexity on user-controlled input sizes.
 4. **Implement** — reproduce the *behavior* from spec, in a single
    class in your project's library directory. Never copy source.
-   Defend against every abuse case enumerated in step 3.
-5. **Verify** — run both test suites against the new impl; loop on
-   failure until both are clean. An abuse failure is a real
-   vulnerability you just introduced; it does not get to be silenced.
+   Defend against every abuse case and stay within every performance
+   mandate enumerated in step 3.
+5. **Verify** — run all three test suites against the new impl; loop
+   on failure until all three are clean. An abuse failure is a real
+   vulnerability you just shipped. A perf failure on user-controlled
+   input is a DoS bug. Neither gets silenced.
 6. **PRD + theseus.json** — write `lib-theseus/<package>/PRD.md`
    (human-readable) **and** `lib-theseus/<package>/theseus.json`
    (machine-readable: which version we studied, which CVEs we
-   defend against, every abuse case → test mapping).
+   defend against, every abuse case → test mapping, every
+   performance mandate → benchmark mapping).
 7. **Cleanup** — remove the original from the manifest, lockfile,
    and `node_modules/`; delete `_research/`; confirm `npm install`
    (or the language equivalent) is a no-op.
@@ -227,6 +233,19 @@ CVEs, lists its abuse-case scenarios, and has a runnable test for
 each. Without that, the rewrite makes the project's security
 posture *worse* than depending on the original — and you wouldn't
 know.
+
+### Why performance mandates?
+
+A re-implementation that's correct and hardened but ten times slower
+than the original is a regression dressed up as a replacement. Worse,
+slow code on a user-controlled input is itself a DoS — the line
+between "merely sluggish" and "denial of service" is whichever input
+shape an attacker chooses. Performance mandates anchor the new code
+to measurements you took from the original (Phase 2), encode the
+user-visible budget (≤100ms for tab-switch renders, a few ms for
+per-request server work, etc.), and turn "feels fast enough" into a
+benchmark with a number. The mandate is on the algorithm — fix the
+algorithm, not the threshold.
 
 ### Why theseus.json?
 
@@ -284,6 +303,8 @@ After your first rewrite, you'll also have:
     ├── tests/                  ← parity test scripts
     ├── abuse-fixtures/         ← attacker-crafted inputs
     ├── abuse-tests/            ← abuse test scripts (one per known CVE + attack class)
+    ├── perf-fixtures/          ← representative inputs for benchmarking
+    ├── perf-tests/             ← performance benchmarks (one per mandate)
     └── _research/              ← gitignored; deleted in Phase 7
 ```
 

@@ -23,14 +23,15 @@ tested, and audited yourself.
   Python, Rust, Go, and Ruby. Exit `0` when clean, exit `1` with a
   grouped report otherwise — suitable for CI gates and pre-commit hooks.
 - **A protocol** (`lib-theseus/PROTOCOL.md`) describing how to replace
-  each one: the seven phases (identify → study → write parity *and*
-  abuse tests → implement → verify → PRD + theseus.json → cleanup),
-  the licensing safety rules (clean-room, no source copying), the
-  parity-and-abuse gate, an anti-cheat table for LLMs.
+  each one: the seven phases (identify → study → write parity, abuse,
+  *and* performance tests → implement → verify → PRD + theseus.json →
+  cleanup), the licensing safety rules (clean-room, no source
+  copying), the parity-abuse-and-performance gate, an anti-cheat
+  table for LLMs.
 - **A `theseus.json` schema** — per-library machine-readable record
   capturing which version was studied, which CVEs it had, which abuse
-  cases your re-implementation defends against. The scanner validates
-  these on every run.
+  cases your re-implementation defends against, and which performance
+  mandates it must meet. The scanner validates these on every run.
 - **A Claude Code skill** (`SKILL.md`) that walks an LLM through the
   whole flow when you say `/lib-theseus`.
 
