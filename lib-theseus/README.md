@@ -259,7 +259,7 @@ malformed records.
 
 ---
 
-## Languages supported in v1
+## Languages supported
 
 | Language | Source | Manifests |
 |---|---|---|
@@ -268,10 +268,13 @@ malformed records.
 | Rust | `.rs` | `Cargo.toml` |
 | Go | `.go` | `go.mod` |
 | Ruby | `.rb .rake .ru` | `Gemfile`, `*.gemspec` |
+| Java / Kotlin | `.java .kt .kts` | `pom.xml`, `build.gradle`, `build.gradle.kts` |
+| C / C++ | `.c .h .cc .cpp .cxx .hpp .hxx .cppm .ipp .tpp .inl` | `conanfile.txt`, `conanfile.py`, `vcpkg.json`, `CMakeLists.txt` |
+| C# / F# / VB.NET | `.cs .fs .vb` | `*.csproj`, `*.fsproj`, `*.vbproj`, `packages.config`, `Directory.{Packages,Build}.props` |
+| Swift | `.swift` | `Package.swift`, `Podfile`, `Cartfile` |
 
-Adding another language is one file under `scanners/`. Plugin
-contract and the gotchas for Java/C++/C#/Swift are documented in
-`PROTOCOL.md §14`.
+Adding another language is one file under `scanners/`. The plugin
+contract is in `PROTOCOL.md §15`.
 
 ---
 

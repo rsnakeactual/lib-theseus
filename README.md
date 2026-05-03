@@ -80,7 +80,7 @@ The repo's directory layout is intentionally identical to the
 expected skill install layout, so `git clone … ~/.claude/skills/lib-theseus`
 works as a one-line install.
 
-## Languages supported in v1
+## Languages supported
 
 | Language | Source | Manifests |
 |---|---|---|
@@ -89,12 +89,15 @@ works as a one-line install.
 | Rust | `.rs` | `Cargo.toml` |
 | Go | `.go` | `go.mod` |
 | Ruby | `.rb .rake .ru` | `Gemfile`, `*.gemspec` |
+| Java / Kotlin | `.java .kt .kts` | `pom.xml`, `build.gradle`, `build.gradle.kts`, `settings.gradle*` |
+| C / C++ | `.c .h .cc .cpp .cxx .hpp .hxx .cppm .ipp .tpp .inl` | `conanfile.txt`, `conanfile.py`, `vcpkg.json`, `CMakeLists.txt` |
+| C# / F# / VB.NET | `.cs .fs .vb` | `*.csproj`, `*.fsproj`, `*.vbproj`, `packages.config`, `Directory.{Packages,Build}.props` |
+| Swift | `.swift` | `Package.swift`, `Podfile`, `Cartfile` |
 
 Adding a new language is one file under `scanners/`. The plugin
-contract is in `lib-theseus/PROTOCOL.md §15`. Java/Kotlin, C/C++, C#,
-and Swift are documented as deferred (each has language-specific
-parsing or build-system gotchas) — open an issue if you'd like them
-added.
+contract is in `lib-theseus/PROTOCOL.md §15`. PHP, Dart/Flutter,
+Elixir, Haskell, Lua and others follow the same shape; open an
+issue if you'd like one added.
 
 ## Why?
 

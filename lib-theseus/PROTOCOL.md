@@ -39,11 +39,12 @@ The only file you should edit per-project is `exceptions.json`.
 project-specific package names, paths, or conventions to them.
 
 The scanner ships with first-class plugins for **JavaScript /
-TypeScript / HTML, Python, Rust, Go, and Ruby**. Other ecosystems
-(Java/Kotlin, C/C++, C#, Swift, PHP, etc.) follow the same principles.
-Adding a new language is one self-contained file under
-`lib-theseus/scanners/` and **does not** require touching the
-driver — see §15.
+TypeScript / HTML, Python, Rust, Go, Ruby, Java / Kotlin, C / C++,
+C# / F# / VB.NET, and Swift** — the nine ecosystems most teams
+encounter. Other languages (PHP, Dart/Flutter, Elixir, Haskell,
+Lua, etc.) follow the same principles. Adding a new language is
+one self-contained file under `lib-theseus/scanners/` and **does
+not** require touching the driver — see §15.
 
 ---
 
@@ -1319,6 +1320,10 @@ files. As of v1, the bundled plugins are:
 | `rust` | `.rs` | `Cargo.toml` | `std/core/alloc/proc_macro/test`, `crate/self/super` |
 | `go` | `.go` | `go.mod` | "first segment has no `.`" heuristic + `module …` line |
 | `ruby` | `.rb .rake .ru` | `Gemfile`, `*.gemspec` | hardcoded Ruby stdlib list |
+| `java` | `.java .kt .kts` | `pom.xml`, `build.gradle{,.kts}`, `settings.gradle{,.kts}` | `java.*`/`javax.*`/`jakarta.*`/`sun.*`/`jdk.*` (JDK), `kotlin.*`/`kotlinx.*` (Kotlin); `groupId` from manifest is local |
+| `c` | `.c .h .cc .cpp .cxx .hpp .hxx .cppm .ipp .tpp .inl` | `conanfile.txt`, `conanfile.py`, `vcpkg.json`, `CMakeLists.txt` | C99/C11/C23 + POSIX + C++17/20/23 stdlib headers; quoted `#include "..."` is project-local; `<path/with/slashes>` is third-party |
+| `csharp` | `.cs .fs .vb` | `*.csproj`, `*.fsproj`, `*.vbproj`, `packages.config`, `Directory.{Packages,Build}.props` | `System.*`; `<RootNamespace>` from manifest is local |
+| `swift` | `.swift` | `Package.swift`, `Podfile`, `Cartfile` | Swift core + Apple frameworks (Foundation/UIKit/SwiftUI/Combine/Core*/AVFoundation/etc.); `Package(name:)` and `.target(name:)` are local |
 
 For each, the scanner surfaces every import / `require` /
 `use` / etc. that points at a third-party package, every manifest
@@ -1547,27 +1552,61 @@ In order, every plugin should:
 ### 15.3 Languages worth adding (and the gotchas)
 
 Some ecosystems have well-defined structure and are quick to add
-(Elixir's `mix.exs`, PHP's `composer.json`, Dart's `pubspec.yaml`).
-Others have genuinely hard edges and deserve their own design pass:
+(PHP's `composer.json`, Elixir's `mix.exs`, Dart's `pubspec.yaml`,
+Lua's rockspec). Others — Java/Kotlin, C/C++, C#/.NET, Swift —
+have language-specific gotchas that v1 has now navigated; if you're
+adding a similar non-trivial language, the patterns below are worth
+copying.
 
-- **Java / Kotlin:** dependencies in Maven `pom.xml` (XML) or Gradle
-  `build.gradle` / `build.gradle.kts` (Groovy / Kotlin DSL). Source
-  imports look like `import com.example.X;` and you cannot tell
-  third-party from project-local without the project's `groupId` or
-  the actual classpath. Plan: parse the build file for groupId,
-  treat anything matching as local.
-- **C / C++:** `#include <…>` vs `#include "…"` is *not* a reliable
-  signal of system-vs-project. Real distinction needs build-system
-  awareness (CMake, Bazel, conan, vcpkg). Probably scan
-  `conanfile.txt` / `vcpkg.json` / CMakeLists.txt for explicit
-  external deps and accept that source-side `#include` cannot be
-  fully classified.
-- **C# / .NET:** `.csproj` is XML. Dependencies via `<PackageReference>`.
-  Source-side `using` statements need namespace-vs-package mapping.
-- **Swift:** `Package.swift` is *Swift code*, not a declarative
-  manifest. A reliable parser needs to evaluate
-  `dependencies: [.package(...)]` array literals. Source-side
-  `import Foundation` etc. needs the Apple-frameworks allowlist.
+**Already shipped (study `scanners/` for working examples):**
+
+- **`scanners/java.js`** — pom.xml is XML, scanned via depth-bounded
+  regex (no real XML parser; we only need `<dependency><groupId>X
+  </groupId><artifactId>Y</artifactId></dependency>` blocks). Gradle
+  is Groovy *or* Kotlin DSL; both forms scan with the same regex
+  set across `implementation`/`api`/`compile…`/`testImplementation`/
+  etc. Project's own `groupId` (Maven) or `group =` (Gradle) is
+  read in `discoverContext` and added to `projectPackages`. Source-
+  side imports strip trailing PascalCase classes to derive the
+  package name (`com.example.foo.Bar` → `com.example.foo`).
+- **`scanners/c.js`** — pragmatic stance: quoted `#include "..."` is
+  treated as project-local; `<path/with/slashes>` is third-party
+  (catches boost/Qt/nlohmann/gtest); single-name `<foo>` is allowed
+  if it's in the C/C++/POSIX stdlib lists. Authoritative deps come
+  from manifests: `conanfile.txt` `[requires]`, `conanfile.py`'s
+  `requires=[…]` or `self.requires(…)`, `vcpkg.json#dependencies`,
+  CMake's `find_package(NAME)` and `pkg_check_modules`.
+- **`scanners/csharp.js`** — `.csproj` / `.fsproj` / `.vbproj` /
+  `Directory.{Packages,Build}.props` parsed for `<PackageReference>`
+  (XML). `packages.config` for `<package id="…">` (legacy). Source-
+  side `using Foo.Bar;` (and VB `Imports`, F# `open`) classified
+  against `System.*` (BCL only — `Microsoft.*` is mostly NuGet, not
+  stdlib). `<RootNamespace>` from project file is the local prefix.
+- **`scanners/swift.js`** — `Package.swift` is real Swift code;
+  parser is regex-based and handles the canonical
+  `.package(url: "https://…", from: "…")` and named-package
+  variants. Project's own name comes from `Package(name: "…")`
+  plus every `.target(name: "…")` (those are local module names).
+  Stdlib is the Apple-frameworks allowlist (Foundation / UIKit /
+  SwiftUI / Combine / Core* / AVFoundation / etc.). Podfile reuses
+  the Gemfile-shape approach (`pod 'Name'`); Cartfile is line-based.
+
+**Still worth adding** (reasonable evening-of-work each):
+
+- **PHP** — `composer.json` is JSON (easy). Source `use Vendor\Pkg\Class;`
+  classified against `composer.json#autoload.psr-4` keys for local
+  vs third-party.
+- **Dart / Flutter** — `pubspec.yaml` is YAML; needs a tiny YAML
+  field reader. Source `import 'package:foo/bar.dart';` is
+  unambiguous about the package name.
+- **Elixir** — `mix.exs` declares deps as `{:name, "~> 1.0"}` tuples;
+  source uses `alias`/`import`/`use` against stdlib modules
+  (`Enum`, `String`, `IO`, etc.).
+- **Haskell / Cabal / Stack** — `*.cabal` and `stack.yaml`; deps
+  appear as `build-depends:` lists.
+- **Bazel** — cross-language, deserves its own approach: scan
+  `WORKSPACE` and `MODULE.bazel` for `bazel_dep` / `http_archive`
+  declarations.
 
 When you add a plugin for one of these, write its own **PRD** under
 `lib-theseus/scanners/<lang>/PRD.md` describing the parsing
