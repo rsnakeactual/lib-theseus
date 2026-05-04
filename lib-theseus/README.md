@@ -158,29 +158,49 @@ your call — we deliberately don't auto-install hooks.)
 
 ## Reading the output
 
+The scanner splits findings into two categories per language:
+
+- **IN USE** — packages with at least one source-side import.
+  These need the seven-phase rewrite.
+- **ORPHANED** — packages listed in a manifest but never imported
+  anywhere in source. **No rewrite needed; just delete the
+  manifest line.** First scans often reveal more orphans than
+  anyone expected.
+
 ```
-=== JAVASCRIPT — UNREWRITTEN ===
+=== JAVASCRIPT — IN USE (rewrite required) ===
 
   marked  (3 sites)
     main.js:1441                marked
     package.json:0              marked
     src/files.html:1783         ../node_modules/marked/lib/marked.umd.js
 
-=== PYTHON — UNREWRITTEN ===
+=== PYTHON — IN USE (rewrite required) ===
 
   requests  (2 sites)
     src/app.py:5                requests
     requirements.txt:1          requests
 
-lib-theseus scan: REWRITE STILL NEEDED — N site(s),
-K unique package(s), L language(s).
+=== ORPHANED — listed in manifest but never imported (just delete the manifest entry) ===
+
+  [javascript]
+    old-build-tool      —  package.json:0
+    abandoned-helper    —  package.json:0
+  [python]
+    leftover-debug-pkg  —  requirements.txt:14
+
+lib-theseus scan: WORK REMAINING — N package(s) in use (rewrite required);
+M orphaned (delete from manifest); K site(s) across L language(s).
 ```
 
-Sites are grouped by **language → package → file:line**. A package is
-fully rewritten only when it disappears from *every* line: source
-imports, manifests (`package.json` / `Cargo.toml` / `go.mod` / etc.),
-HTML CDN tags, and `node_modules`-relative loads. Removing it from
-just one is a half-rewrite (see `PROTOCOL.md §11`'s anti-cheat).
+Sites are grouped by **language → package → file:line**. An IN USE
+package is fully rewritten only when it disappears from *every* line:
+source imports, manifests, HTML CDN tags, and `node_modules`-relative
+loads. Removing the import sites but leaving the manifest entry moves
+a package from IN USE to ORPHANED — that's progress, not done.
+
+JSON output (`--json`) annotates every violation with `orphan: true|false`
+and includes a top-level `summary` with counts.
 
 ---
 

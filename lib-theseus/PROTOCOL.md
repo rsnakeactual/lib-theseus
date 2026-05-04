@@ -271,15 +271,23 @@ Nothing else is decided yet.
 - For each package the scanner reports, add a row to
   `lib-theseus/INVENTORY.md` (format in §11) with a status of
   `pending`.
-- Decide a tractable order. Cheap-and-isolated first (frontmatter
-  parsers, UUID generators, small utilities) before sprawling-and-
-  protocol-heavy (DOM implementations, mail clients, terminal
-  emulators).
+- **Resolve orphans first — they're free.** The scanner splits its
+  report into IN USE (needs rewrite) and ORPHANED (listed in
+  manifest, imported nowhere). Orphans need no Phase 2-7 work at
+  all; just delete the manifest line, run the appropriate install
+  command (`npm install` / `cargo build` / etc.) to update the
+  lockfile, and re-run the scanner to confirm the package is gone.
+  The first scan often reveals a surprising number of these.
+- For the IN USE packages, decide a tractable order. Cheap-and-
+  isolated first (frontmatter parsers, UUID generators, small
+  utilities) before sprawling-and-protocol-heavy (DOM
+  implementations, mail clients, terminal emulators).
 
-**Done when:** every line of the scanner's report is a row in the
-inventory.
+**Done when:** every IN USE entry is a row in the inventory and
+every ORPHANED entry has been resolved (deleted from its manifest).
 
-**Do not** start writing code yet. Knowing the list is its own phase.
+**Do not** start writing replacement code yet for IN USE packages.
+Knowing the list is its own phase.
 
 ### Phase 2 — Study the library
 
@@ -1418,8 +1426,19 @@ in a non-`replaced` status. Once a package's INVENTORY status is
 
 ### 14.6 How to read its output
 
+The scanner splits findings into two categories per language:
+
+- **IN USE** — packages with at least one source-side import.
+  These need the seven-phase rewrite.
+- **ORPHANED** — packages declared in a manifest with **zero**
+  source-side imports anywhere in the tree. These need no rewrite
+  at all; just delete the manifest entry. The first scan often
+  reveals more orphans than anyone expected — leftover from spike
+  work that didn't ship, removed features, transitive deps that
+  nobody pruned.
+
 ```
-=== JAVASCRIPT — UNREWRITTEN ===
+=== JAVASCRIPT — IN USE (rewrite required) ===
 
   <package>  (3 sites)
     main.js:1441                     <package>
@@ -1429,21 +1448,34 @@ in a non-`replaced` status. Once a package's INVENTORY status is
   [CDN] https://unpkg.com/x@1/x.js   (1 site)
     src/dashboard.html:12            https://unpkg.com/x@1/x.js
 
-=== PYTHON — UNREWRITTEN ===
+=== PYTHON — IN USE (rewrite required) ===
 
   requests  (2 sites)
     src/app.py:5                     requests
     requirements.txt:1               requests
 
-lib-theseus scan: REWRITE STILL NEEDED — N site(s),
-K unique package(s), L language(s).
+=== ORPHANED — listed in manifest but never imported (just delete the manifest entry) ===
+
+  [javascript]
+    old-build-tool      —  package.json:0
+    abandoned-helper    —  package.json:0
+  [python]
+    leftover-debug-pkg  —  requirements.txt:14
+
+lib-theseus scan: WORK REMAINING — N package(s) in use (rewrite required);
+M orphaned (delete from manifest); K site(s) across L language(s).
 Resolve per lib-theseus/PROTOCOL.md and re-run.
 ```
 
 A package is **fully replaced** when, and only when, the scanner
 stops mentioning it in *every* section for its language. Removing
-the import sites but leaving it in the manifest is a half-rewrite,
-and vice versa.
+the import sites but leaving it in the manifest moves a package from
+IN USE to ORPHANED — that's progress, but not done. The orphan still
+has to be deleted from the manifest before the package is gone.
+
+JSON output (`--json`) includes per-violation `orphan: true|false`
+flags plus a top-level `summary` object with counts:
+`{ totalSites, uniquePackages, orphanedPackages, inUsePackages, invalidTheseusRecords }`.
 
 ### 14.7 When the scanner finds something you didn't expect
 

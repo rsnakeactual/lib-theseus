@@ -449,14 +449,68 @@ for (const ent of theseusEntries) {
 }
 
 // ---------------------------------------------------------------------------
+// Classify each (language, package) pair as in-use, orphaned, or unlisted.
+//
+//   in-use    — appears in a manifest AND in source (regular case; needs rewrite)
+//   imported-not-listed — appears in source but no manifest (transitive
+//                         dependency leak, peer dep used via globals, etc.)
+//   orphaned  — appears in a manifest but never imported in any source
+//               file (free win: just delete the manifest line)
+//
+// Orphans are the cheapest category to resolve — they don't need to be
+// rewritten at all. Surfacing them in their own section turns "find what's
+// safe to delete" from a manual exercise into a mechanical one.
+
+function isManifestKind(kind) {
+  return typeof kind === 'string' && kind.startsWith('manifest-');
+}
+
+function classifyUsage() {
+  // key = "lang::package"
+  const groups = new Map();
+  for (const v of violations) {
+    const key = `${v.language}::${v.package}`;
+    if (!groups.has(key)) {
+      groups.set(key, { language: v.language, package: v.package, sites: [], hasManifest: false, hasImport: false });
+    }
+    const g = groups.get(key);
+    g.sites.push(v);
+    if (isManifestKind(v.kind)) g.hasManifest = true;
+    else g.hasImport = true;
+  }
+  const orphans = [];
+  const inUse = [];
+  for (const g of groups.values()) {
+    if (g.hasManifest && !g.hasImport) orphans.push(g);
+    else inUse.push(g);
+  }
+  return { orphans, inUse, total: groups.size };
+}
+
+// ---------------------------------------------------------------------------
 // Output
 
 function writeReport() {
+  const usage = classifyUsage();
+  // Annotate each violation with its usage classification (helpful for JSON
+  // consumers and downstream tooling).
+  const orphanKeys = new Set(usage.orphans.map(g => `${g.language}::${g.package}`));
+  for (const v of violations) {
+    v.orphan = orphanKeys.has(`${v.language}::${v.package}`);
+  }
+
   if (asJson) {
     process.stdout.write(JSON.stringify({
       target, languages: PLUGINS.map(p => p.language),
       violations,
       theseusRecords: theseusFindings,
+      summary: {
+        totalSites: violations.length,
+        uniquePackages: usage.total,
+        orphanedPackages: usage.orphans.length,
+        inUsePackages: usage.inUse.length,
+        invalidTheseusRecords: theseusFindings.length,
+      },
       clean: violations.length === 0 && theseusFindings.length === 0,
     }, null, 2) + '\n');
     return;
@@ -468,28 +522,43 @@ function writeReport() {
     return;
   }
 
-  if (!quiet && violations.length > 0) {
+  if (!quiet && usage.inUse.length > 0) {
     const byLang = new Map();
-    for (const v of violations) {
-      if (!byLang.has(v.language)) byLang.set(v.language, new Map());
-      const byPkg = byLang.get(v.language);
-      const key = (v.kind === 'cdn-script' || v.kind === 'cdn-link')
-        ? `[CDN] ${v.spec}`
-        : v.package;
-      if (!byPkg.has(key)) byPkg.set(key, []);
-      byPkg.get(key).push(v);
+    for (const g of usage.inUse) {
+      if (!byLang.has(g.language)) byLang.set(g.language, []);
+      byLang.get(g.language).push(g);
     }
-    const langs = [...byLang.keys()].sort();
-    for (const lang of langs) {
-      process.stdout.write(`\n=== ${lang.toUpperCase()} — UNREWRITTEN ===\n`);
-      const byPkg = byLang.get(lang);
-      const keys = [...byPkg.keys()].sort();
-      for (const pkg of keys) {
-        const list = byPkg.get(pkg);
-        process.stdout.write(`\n  ${pkg}  (${list.length} site${list.length === 1 ? '' : 's'})\n`);
-        for (const v of list) {
+    for (const lang of [...byLang.keys()].sort()) {
+      process.stdout.write(`\n=== ${lang.toUpperCase()} — IN USE (rewrite required) ===\n`);
+      const groups = byLang.get(lang);
+      // Sort groups by displayed name (package, except for CDN refs which
+      // sort by their full URL).
+      groups.sort((a, b) => a.package.localeCompare(b.package));
+      for (const g of groups) {
+        // CDN entries: keep the original [CDN] header convention.
+        const cdnSite = g.sites.find(s => s.kind === 'cdn-script' || s.kind === 'cdn-link');
+        const header = cdnSite ? `[CDN] ${cdnSite.spec}` : g.package;
+        process.stdout.write(`\n  ${header}  (${g.sites.length} site${g.sites.length === 1 ? '' : 's'})\n`);
+        for (const v of g.sites) {
           process.stdout.write(`    ${v.file}:${v.line}  ${v.spec}\n`);
         }
+      }
+    }
+  }
+
+  if (!quiet && usage.orphans.length > 0) {
+    process.stdout.write('\n=== ORPHANED — listed in manifest but never imported (just delete the manifest entry) ===\n');
+    const byLang = new Map();
+    for (const g of usage.orphans) {
+      if (!byLang.has(g.language)) byLang.set(g.language, []);
+      byLang.get(g.language).push(g);
+    }
+    for (const lang of [...byLang.keys()].sort()) {
+      process.stdout.write(`\n  [${lang}]\n`);
+      const groups = byLang.get(lang).sort((a, b) => a.package.localeCompare(b.package));
+      for (const g of groups) {
+        const sites = g.sites.map(s => `${s.file}:${s.line}`).join(', ');
+        process.stdout.write(`    ${g.package}  —  ${sites}\n`);
       }
     }
   }
@@ -504,17 +573,22 @@ function writeReport() {
     }
   }
 
-  const totalPkgs = new Set(violations.map(v => `${v.language}:${v.package}`)).size;
   const langCount = new Set(violations.map(v => v.language)).size;
   const parts = [];
+  if (usage.inUse.length > 0) {
+    parts.push(`${usage.inUse.length} package(s) in use (rewrite required)`);
+  }
+  if (usage.orphans.length > 0) {
+    parts.push(`${usage.orphans.length} orphaned (delete from manifest)`);
+  }
   if (violations.length > 0) {
-    parts.push(`${violations.length} site(s), ${totalPkgs} unique package(s), ${langCount} language(s)`);
+    parts.push(`${violations.length} site(s) across ${langCount} language(s)`);
   }
   if (theseusFindings.length > 0) {
     parts.push(`${theseusFindings.length} invalid theseus.json record(s)`);
   }
   process.stdout.write(
-    `\nlib-theseus scan: REWRITE STILL NEEDED — ${parts.join('; ')}.\n` +
+    `\nlib-theseus scan: WORK REMAINING — ${parts.join('; ')}.\n` +
     `Resolve per lib-theseus/PROTOCOL.md and re-run.\n\n`
   );
 }

@@ -17,11 +17,15 @@ tested, and audited yourself.
 
 ## What it gives you
 
-- **A scanner** (`lib-theseus/scan.js`, ~750 lines, pure Node, **no
+- **A scanner** (`lib-theseus/scan.js`, ~900 lines, pure Node, **no
   dependencies of its own**) that walks any project and reports every
-  third-party package reference across JavaScript / TypeScript / HTML,
-  Python, Rust, Go, and Ruby. Exit `0` when clean, exit `1` with a
-  grouped report otherwise — suitable for CI gates and pre-commit hooks.
+  third-party package reference across nine ecosystems
+  (JavaScript / TypeScript / HTML, Python, Rust, Go, Ruby, Java /
+  Kotlin, C / C++, C# / F# / VB.NET, Swift). It splits findings into
+  **IN USE** (need the rewrite procedure) and **ORPHANED** (listed in
+  a manifest but never imported — just delete the line). Exit `0` when
+  clean, exit `1` with a grouped report otherwise — suitable for CI
+  gates and pre-commit hooks.
 - **A protocol** (`lib-theseus/PROTOCOL.md`) describing how to replace
   each one: the seven phases (identify → study → write parity, abuse,
   *and* performance tests → implement → verify → PRD + theseus.json →
@@ -32,8 +36,11 @@ tested, and audited yourself.
   capturing which version was studied, which CVEs it had, which abuse
   cases your re-implementation defends against, and which performance
   mandates it must meet. The scanner validates these on every run.
-- **A Claude Code skill** (`SKILL.md`) that walks an LLM through the
-  whole flow when you say `/lib-theseus`.
+- **A Claude Code skill** (`SKILL.md`) that walks Claude through the
+  whole flow when you say `/lib-theseus`. For OpenAI Codex, Cursor,
+  Devin, Aider, and other agent tools, equivalent orientation lives
+  in `AGENTS.md` at the repo root — it's the same content with no
+  Claude-specific frontmatter or paths.
 
 ## Install
 
@@ -48,7 +55,20 @@ payload is installed in your project, copies it in if not, asks one
 short question per detected language to populate `exceptions.json`,
 runs the first scan, and recommends what to tackle first.
 
-### Manually (no Claude Code required)
+### With OpenAI Codex / Cursor / Devin / Aider / any other agent
+
+Clone the repo into your workspace; the agent will pick up
+`AGENTS.md` automatically (the cross-tool convention). It contains
+the same install / scan / phase-walkthrough instructions as the
+Claude skill, written in tool-agnostic language.
+
+```sh
+git clone git@github.com:rsnakeactual/lib-theseus.git
+# Your agent reads AGENTS.md from the cloned repo and walks you
+# through dropping the payload into your host project.
+```
+
+### Manually (any LLM-free environment)
 
 ```sh
 git clone git@github.com:rsnakeactual/lib-theseus.git
@@ -63,6 +83,7 @@ node /your/project/lib-theseus/scan.js
 
 ```
 SKILL.md                          ← Claude Code skill descriptor
+AGENTS.md                         ← orientation for Codex/Cursor/Devin/etc.
 lib-theseus/                      ← the payload — drop this into any project
 ├── PROTOCOL.md                   ← the rules; read this first
 ├── README.md                     ← on-ramp once installed

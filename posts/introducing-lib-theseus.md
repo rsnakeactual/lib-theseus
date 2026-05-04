@@ -109,7 +109,32 @@ tree. They can't have CVEs because they aren't there. Your attack
 surface is exactly the surface you actually use, with nothing extra
 to be exploited later.
 
-### 3. Real, currently-known vulnerabilities get rewritten away
+### 3. Dependencies you forgot you stopped using just go away
+
+The two benefits above describe what happens *after* you rewrite a
+library. This one is the free win that happens *before* any rewrite.
+The scanner separates two kinds of entries that look identical in
+your `package.json`:
+
+- **In use** — the package is `import`ed somewhere in source.
+  Replacing it requires the seven-phase procedure.
+- **Orphaned** — the package is listed in the manifest but no source
+  file references it. The line in `package.json` is historical
+  residue.
+
+Orphans appear in their own dedicated section of the scanner's
+output. They typically show up because of leftover spike work that
+didn't ship, removed features whose dependency line nobody pruned,
+transitive deps a removed package brought along, dev tooling
+that's been replaced but the entry is still there. They need
+**no rewrite at all**. Just delete the line, run `npm install` to
+update the lockfile, and they're gone — the package stops being
+fetched, stops resolving, stops contributing to your CVE feed,
+and stops mattering. A typical first scan reveals more orphans
+than anyone expected; resolving them is often the most visible
+"win" in the first hour of using lib-theseus.
+
+### 4. Real, currently-known vulnerabilities get rewritten away
 
 The protocol's Phase 3b (abuse cases) requires you to look up every
 CVE in the studied version's history, write a test that reproduces
@@ -124,7 +149,7 @@ A side-effect: your implementation often comes out *better than* the
 original. You knew the bugs going in. The original's maintainers
 fixed them after they happened.
 
-### 4. Vulnerabilities that remain become harder to find
+### 5. Vulnerabilities that remain become harder to find
 
 Every public CVE database — the npm advisory DB, OSV, GHSA, MITRE —
 indexes by package name and version. An attacker scans your
@@ -142,7 +167,7 @@ is not a defense in depth** — it is a *layer* of defense in depth,
 and it's a layer that lib-theseus turns on for free as a side-effect
 of the rewrite.
 
-### 5. Compliance becomes much easier
+### 6. Compliance becomes much easier
 
 Most compliance regimes that touch software (SOC 2, ISO 27001,
 HIPAA, PCI-DSS, the EU CRA, FedRAMP) have some equivalent of
@@ -158,7 +183,7 @@ dependencies becomes "we have none."
 This is, frankly, the benefit that pays for the work in regulated
 industries. Auditors stop asking about your `package.json`.
 
-### 6. You stop being one `npm publish` away from a bad day
+### 7. You stop being one `npm publish` away from a bad day
 
 The most under-appreciated benefit isn't security; it's
 *organizational*. Your shipping cadence stops being coupled to
