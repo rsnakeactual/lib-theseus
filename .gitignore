@@ -3,6 +3,11 @@
 # original packages that get deleted in Phase 7.
 **/lib-theseus/*/_research/
 
+# Distribution tarball — built by ./make-tarball.sh, hosted from the
+# blog post; not checked in.
+lib-theseus.tar.gz
+*.tar.gz
+
 # OS / editor cruft
 .DS_Store
 Thumbs.db

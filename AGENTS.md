@@ -1,11 +1,13 @@
 # AGENTS.md — orientation for LLM agents
 
 This file is read by OpenAI Codex, Cursor, Devin, Aider, and any other
-LLM-driven dev tool that picks up `AGENTS.md` from a project tree. If
-you're a Claude Code user, see `SKILL.md` instead — it's
-Claude-Code-specific (slash commands, skill discovery), but the
-instructions in this file are equivalent and you can read it for
-extra orientation.
+LLM-driven dev tool that picks up `AGENTS.md` from a project tree.
+`SKILL.md` is the installable skill descriptor — the same file works
+for Claude Code (`~/.claude/skills/lib-theseus/SKILL.md`) and OpenAI
+Codex (`~/.codex/skills/lib-theseus/SKILL.md`), since both honor the
+`name:` / `description:` frontmatter convention. The instructions in
+this file are equivalent to the SKILL.md body and can be read for
+extra orientation by any agent.
 
 ---
 
@@ -26,10 +28,9 @@ codebase to **zero public dependencies**. The repo holds:
 - `README.md` — the on-ramp for human readers, also installed as
   `lib-theseus/README.md` once dropped into a host project.
 
-The repo at `github.com/rsnakeactual/lib-theseus` is the *tooling*.
-Most of the work happens in **someone else's project** that's
-*using* lib-theseus. Don't confuse "working on lib-theseus" with
-"using lib-theseus on a host project."
+This directory is the *tooling*. Most of the work happens in
+**someone else's project** that's *using* lib-theseus. Don't confuse
+"working on lib-theseus" with "using lib-theseus on a host project."
 
 ---
 

@@ -18,13 +18,17 @@ Log4Shell, an `eslint-scope` token leak, an `ua-parser-js` cryptominer,
 or any of the dozen-per-year supply-chain incidents that have stopped
 being newsworthy because they're routine.
 
-[**lib-theseus**](https://github.com/rsnakeactual/lib-theseus) is a
-protocol and a scanner for getting out of the contract. You replace
-every public dependency with a first-party reimplementation —
-behavior-equivalent, hardened against the original's CVE history,
-held to a performance budget — until `npm install` (or `pip install`,
-or `cargo build`, or `bundle install`) downloads nothing on a clean
-checkout. The hull is the same shape. Every plank is yours.
+**lib-theseus** is a protocol and a scanner for getting out of the
+contract. You replace every public dependency with a first-party
+reimplementation — behavior-equivalent, hardened against the
+original's CVE history, held to a performance budget — until
+`npm install` (or `pip install`, or `cargo build`, or `bundle install`)
+downloads nothing on a clean checkout. The hull is the same shape.
+Every plank is yours.
+
+[Download `lib-theseus.tar.gz`](#) from the link at the bottom of
+this post. There's no public registry to install from and no public
+git remote to clone. You download once, extract, and use locally.
 
 This isn't about hand-rolling everything from scratch on day one.
 It's about a structured, defensible *path* from "we depend on 200
@@ -332,31 +336,45 @@ prioritize.
 
 ## Get started
 
-```sh
-# As a Claude Code skill (one-line install for Claude users):
-git clone git@github.com:rsnakeactual/lib-theseus.git ~/.claude/skills/lib-theseus
+Download [`lib-theseus.tar.gz`](#) (link at the bottom of this post)
+and extract it once:
 
-# Manually (any Node 18+ environment):
-git clone git@github.com:rsnakeactual/lib-theseus.git
+```sh
+curl -O https://example.com/lib-theseus.tar.gz   # use the actual URL from this post
+tar -xzf lib-theseus.tar.gz
+```
+
+That gives you a `lib-theseus/` directory. From here, pick whichever
+path matches your tooling:
+
+```sh
+# As a Claude Code skill:
+mv lib-theseus ~/.claude/skills/lib-theseus
+
+# As an OpenAI Codex skill:
+mv lib-theseus ~/.codex/skills/lib-theseus
+
+# Manually (any Node 18+ environment, no agent required):
 cp -r lib-theseus/lib-theseus /your/project/lib-theseus
-cp /your/project/lib-theseus/exceptions.example.json /your/project/lib-theseus/exceptions.json
+cp /your/project/lib-theseus/exceptions.example.json \
+   /your/project/lib-theseus/exceptions.json
 node /your/project/lib-theseus/scan.js
 ```
 
 The first scan will tell you exactly which packages exist in your
 tree and surface them grouped by language. That output is your
-inventory and your roadmap. Pick the easiest single-purpose library
-first (a frontmatter parser, a UUID generator, a date library —
-something with a small spec and a clear contract). Walk it through
-the seven phases. Ship it. Run the scanner. Watch one row disappear
-from the report. Pick the next one.
+inventory and your roadmap. The first hour is usually free — orphan
+deps (listed in your manifest, imported nowhere) drop out as
+manifest-line deletions with no rewriting required. Then pick the
+easiest single-purpose library still IN USE (a frontmatter parser, a
+UUID generator, a date library — something with a small spec and a
+clear contract). Walk it through the seven phases. Ship it. Run the
+scanner. Watch one row disappear from the report. Pick the next one.
 
-The repo is MIT-licensed and lives at
-[github.com/rsnakeactual/lib-theseus](https://github.com/rsnakeactual/lib-theseus).
-Issues and PRs welcome. The one rule that applies to contributions
-is the rule the protocol enforces: any PR that adds a public
-dependency to the scanner or its plugins will be rejected. The
-scanner needs to live by the rule it enforces.
+lib-theseus is MIT-licensed. The one rule that applies to
+contributions is the rule the protocol enforces: anything that adds
+a public dependency to the scanner or its plugins will be rejected.
+The scanner needs to live by the rule it enforces.
 
 ---
 

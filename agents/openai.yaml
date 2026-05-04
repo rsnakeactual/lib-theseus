@@ -1,0 +1,4 @@
+interface:
+  display_name: "Lib Theseus"
+  short_description: "Drive projects to zero public dependencies"
+  default_prompt: "Use $lib-theseus to scan this project for public dependencies and recommend the first rewrite candidate."
